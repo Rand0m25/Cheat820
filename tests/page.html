@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>82-0 (fake test page)</title>
+<style>
+  /* Hostile page CSS to test the panel's style isolation */
+  * { box-sizing: content-box !important; font-family: "Comic Sans MS" !important; }
+  button { all: unset; color: hotpink !important; font-size: 40px !important; }
+  div { line-height: 5 !important; }
+</style>
+</head>
+<body>
+  <div id="app">
+    <h1>Fake 82-0 game</h1>
+    <div id="lineup-node">lineup</div>
+    <div id="settings-node">settings</div>
+    <div id="record-node">record</div>
+    <div id="recordstr-node">record string</div>
+  </div>
+<script>
+(function () {
+  // Build a fake React fiber tree that mimics what cheat820's root()/hooks() scan for.
+  // Each "hook" is a linked-list node: { memoizedState, next, queue:{dispatch} }.
+  // dispatch synchronously writes the new value so tests can observe mutations,
+  // mirroring how a real useState setter eventually updates memoizedState.
+  function App() {}      // component types must be functions/objects
+  function Lineup() {}
+  function Settings() {}
+  function RecordCard() {}
+  function RecordStr() {}
+
+  function makeHook(value) {
+    var node = { memoizedState: value, next: null, queue: null };
+    node.queue = { dispatch: function (v) {
+      // emulate React: accept value or updater fn
+      node.memoizedState = (typeof v === "function") ? v(node.memoizedState) : v;
+    } };
+    return node;
+  }
+
+  // ----- state values -----
+  var lineupValue = {
+    PG: { name: "Test Guard", ppg: 11, rpg: 3, apg: 6, spg: 1, bpg: 0 },
+    SG: { name: "Test Wing",  ppg: 14, rpg: 4, apg: 2, spg: 1, bpg: 0 },
+    C:  { name: "Test Big",   pts: 9,  reb: 8, ast: 1, stl: 0, blk: 2 }
+  };
+  var settingsValue = {
+    enabledDecades: ["90's"],
+    testMode: false,
+    testModeTeamSelection: false,
+    hardMode: true
+  };
+  var recordValue = { wins: 5, losses: 3 };
+  var recordStrValue = "5-3";
+
+  // ----- fibers -----
+  var fApp      = { type: App,        return: null, child: null, sibling: null, memoizedState: null };
+  var fLineup   = { type: Lineup,     return: fApp,  child: null, sibling: null, memoizedState: makeHook(lineupValue) };
+  var fSettings = { type: Settings,   return: fApp,  child: null, sibling: null, memoizedState: makeHook(settingsValue) };
+  var fRecord   = { type: RecordCard, return: fApp,  child: null, sibling: null, memoizedState: makeHook(recordValue) };
+  var fRecStr   = { type: RecordStr,  return: fApp,  child: null, sibling: null, memoizedState: makeHook(recordStrValue) };
+
+  fApp.child = fLineup;
+  fLineup.sibling = fSettings;
+  fSettings.sibling = fRecord;
+  fRecord.sibling = fRecStr;
+
+  // Attach fibers to real DOM nodes via the React-style __reactFiber$<rand> key.
+  var KEY = "__reactFiber$test123";
+  document.getElementById("lineup-node")[KEY] = fLineup;
+  document.getElementById("settings-node")[KEY] = fSettings;
+  document.getElementById("record-node")[KEY] = fRecord;
+  document.getElementById("recordstr-node")[KEY] = fRecStr;
+
+  // Expose the live values so the test runner can read post-mutation state.
+  window.__fake = {
+    key: KEY,
+    get lineup() { return fLineup.memoizedState.memoizedState; },
+    get settings() { return fSettings.memoizedState.memoizedState; },
+    get record() { return fRecord.memoizedState.memoizedState; },
+    get recordStr() { return fRecStr.memoizedState.memoizedState; }
+  };
+})();
+</script>
+</body>
+</html>
