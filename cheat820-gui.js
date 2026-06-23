@@ -19,10 +19,16 @@
    * (a) install onto/repair the engine and (b) detect tree presence
    * for the status header regardless of which engine is installed. */
   function localRoot() {
-    var els = document.querySelectorAll("body *");
+    // Scan ALL elements (not just body descendants) and accept either modern
+    // (__reactFiber$) or legacy (__reactInternalInstance$) fiber keys, so the
+    // root is found across React versions and app shells.
+    var els = document.querySelectorAll("*");
     for (var i = 0; i < els.length; i++) {
-      var key = Object.keys(els[i]).find(function (k) { return k.indexOf("__reactFiber$") === 0; });
-      if (key) { var f = els[i][key]; while (f.return) f = f.return; return f; }
+      var ks = Object.keys(els[i]), key = null;
+      for (var j = 0; j < ks.length; j++) {
+        if (ks[j].indexOf("__reactFiber$") === 0 || ks[j].indexOf("__reactInternalInstance$") === 0) { key = ks[j]; break; }
+      }
+      if (key) { var f = els[i][key]; while (f && f.return) f = f.return; return f; }
     }
     return null;
   }
@@ -651,10 +657,20 @@
       return { badge: n, line: "Scan: " + n + " hook(s) (see devtools console.table)" };
     });
   });
+  // Undo must NOT be gated behind tree detection: it just replays the setters
+  // captured earlier, so it has to run even if the React root can't be located
+  // at this instant. Always-runs, never throws.
   btnUndo.addEventListener("click", function () {
-    runAction(btnUndo, "Undo", function () { return cheat.undo(); }, function (n) {
-      return { badge: n, line: "Undo: reverted " + n + " change(s)" };
-    });
+    if (!engineReady()) { appendLog("engine not available", true); return; }
+    try {
+      var n = cheat.undo();
+      showBadge(btnUndo, n);
+      appendLog(n > 0 ? ("Undo: reverted " + n + " change(s)") : "Undo: nothing to undo");
+      refreshStatus();
+    } catch (e) {
+      appendLog("undo error: " + (e && e.message ? e.message : e), true);
+      showBadge(btnUndo, "!");
+    }
   });
 
   /* ---------------- Leaderboard toggle ---------------- */
@@ -718,10 +734,19 @@
   btnClose.addEventListener("click", closePanel);
 
   /* ---------------- Dragging (Pointer Events: mouse + touch) -------- */
-  var dragging = false, offX = 0, offY = 0, dragId = null;
+  var dragging = false, offX = 0, offY = 0, dragId = null, moved = false, downX = 0, downY = 0;
+
+  function expandPill() {
+    if (!card.classList.contains("pill")) return false;
+    card.classList.remove("pill");
+    btnMin.textContent = "−";
+    clampToViewport();
+    return true;
+  }
 
   function onPointerMove(e) {
     if (!dragging) return;
+    if (!moved && (Math.abs(e.clientX - downX) + Math.abs(e.clientY - downY) > 4)) moved = true;
     var vw = window.innerWidth, vh = window.innerHeight;
     var w = card.offsetWidth, h = card.offsetHeight;
     var left = e.clientX - offX;
@@ -739,6 +764,10 @@
     try { if (dragId !== null && hdr.releasePointerCapture) hdr.releasePointerCapture(dragId); } catch (err) {}
     dragId = null;
     if (document.body) document.body.style.userSelect = "";
+    // A tap (no real drag) on the collapsed pill expands it again. We use the
+    // pointer sequence rather than a 'click' event because onPointerDown calls
+    // preventDefault, which can suppress the synthetic click on the header.
+    if (!moved) expandPill();
   }
   function onPointerDown(e) {
     // only primary button / primary pointer; ignore header buttons
@@ -746,6 +775,8 @@
     if (e.isPrimary === false) return;
     if (e.target === btnMin || e.target === btnClose) return;
     dragging = true;
+    moved = false;
+    downX = e.clientX; downY = e.clientY;
     var rect = card.getBoundingClientRect();
     offX = e.clientX - rect.left;
     offY = e.clientY - rect.top;
