@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>RNGdle (mock test page)</title>
+<style>
+  /* Hostile page CSS to test the panel's Shadow-DOM style isolation */
+  * { box-sizing: content-box !important; font-family: "Comic Sans MS" !important; }
+  button { all: unset; color: hotpink !important; font-size: 40px !important; }
+  div { line-height: 5 !important; }
+</style>
+</head>
+<body>
+  <div id="app">
+    <h1>Fake RNGdle</h1>
+    <div id="result">result area</div>
+    <button id="gen">GENERATE</button>
+  </div>
+<script>
+(function () {
+  // Build a fake React fiber tree shaped like RNGdle's home component:
+  //   component L with dispatchable hooks [ E(rollResult), analysis, lock(bool), anim(bool), revealed(int) ]
+  //   + a GENERATE button child whose memoizedProps.onRoll IS the guest roll handler.
+  // The handler mirrors the real one: number = Math.floor(1000001*Math.random()),
+  // badges/score from a stub scorer, persisted to the guest localStorage keys.
+  function L() {}        // main game component
+  function GenBtn() {}   // GENERATE button component
+
+  function mkHook(value) {
+    var node = { memoizedState: value, next: null, queue: null };
+    node.queue = { dispatch: function (v) { node.memoizedState = (typeof v === "function") ? v(node.memoizedState) : v; } };
+    return node;
+  }
+
+  // hook chain for component L (order matters: E first, then analysis, then the boolean lock)
+  var hE = mkHook(null);          // roll result {number,badges,totalScore} | null
+  var hAnalysis = mkHook(null);   // {number,badges,scoringBadges,totalScore} | null
+  var hLock = mkHook(false);      // hasRolledToday (boolean)
+  var hAnim = mkHook(false);      // rolling animation (boolean)
+  var hRevealed = mkHook(0);      // revealed digit count (int)
+  hE.next = hAnalysis; hAnalysis.next = hLock; hLock.next = hAnim; hAnim.next = hRevealed; hRevealed.next = null;
+
+  function today() { return new Date().toISOString().split("T")[0]; }
+
+  // stub scorer (the real game uses analyzeNumber); enough to assert badges follow the number
+  function stubScore(num) {
+    var s = String(num), b = [];
+    if (s.indexOf("777") >= 0) b.push({ id: "JACKPOT", label: "Jackpot" });
+    if (num === 69) b.push({ id: "NICE", label: "Nice" });
+    if (num === 666) b.push({ id: "DEVIL", label: "Devil" });
+    if (num === 1000000) b.push({ id: "MAX", label: "Max" });
+    return { number: num, badges: b, totalScore: num };
+  }
+
+  // the real roll handler (guest branch of eU)
+  function onRoll() {
+    if (localStorage.getItem("rngdle_guest_roll_date") === today()) return; // daily lock
+    var num = Math.floor(1000001 * Math.random());
+    var res = stubScore(num);
+    localStorage.setItem("rngdle_guest_roll_date", today());
+    localStorage.setItem("rngdle_guest_roll_data", JSON.stringify(res));
+    hE.queue.dispatch(res);
+    hAnalysis.queue.dispatch({ number: num, badges: res.badges, scoringBadges: res.badges, totalScore: res.totalScore });
+    hLock.queue.dispatch(true);
+    hAnim.queue.dispatch(true);
+    window.__rolls = (window.__rolls || 0) + 1;
+  }
+
+  var fL = { type: L, return: null, child: null, sibling: null, memoizedState: hE, memoizedProps: {} };
+  var fBtn = { type: GenBtn, return: fL, child: null, sibling: null, memoizedState: null, memoizedProps: { onRoll: onRoll } };
+  fL.child = fBtn;
+
+  var KEY = "__reactFiber$mock123";
+  document.getElementById("app")[KEY] = fL;
+  document.getElementById("gen")[KEY] = fBtn;
+  document.getElementById("result")[KEY] = fL;
+
+  window.__rolls = 0;
+  window.__state = {
+    key: KEY,
+    get E() { return hE.memoizedState; },
+    get analysis() { return hAnalysis.memoizedState; },
+    get lock() { return hLock.memoizedState; },
+    get rolls() { return window.__rolls; }
+  };
+})();
+</script>
+</body>
+</html>
