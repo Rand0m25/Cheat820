@@ -32,8 +32,10 @@ by default so nothing you do gets submitted.
    - **Block Leaderboard** toggle (ON by default)
 5. Finish the draft and sim the season to land 82-0.
 
-The panel is draggable, collapses to a pill, isolates its own styles (Shadow DOM),
-and is safe to paste more than once.
+The panel is draggable, collapses to a pill (**tap the pill to expand it again**),
+isolates its own styles (Shadow DOM), and is safe to paste more than once. **Undo**
+always works — it replays the changes it recorded, even if the React tree can't be
+re-detected at that moment.
 
 ## Use the console engine (no GUI)
 

@@ -144,6 +144,46 @@ try {
     check('clicking action without React does not throw', (await page.evaluate(() => { try { window.__click('max stat'); return 'ok'; } catch (e) { return String(e); } })) === 'ok');
     await page.close();
   }
+
+  // real-mouse helpers (pointer flow, not just .click()) for the chrome buttons
+  const findBtn = (page, t) => page.evaluate((t) => {
+    const hosts = [...document.querySelectorAll('*')].filter(e => e.shadowRoot);
+    for (const h of hosts) for (const btn of h.shadowRoot.querySelectorAll('button')) {
+      const lab = ((btn.textContent || '') + ' ' + (btn.getAttribute('aria-label') || '')).toLowerCase();
+      if (lab.includes(t.toLowerCase())) { const r = btn.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, visible: r.width > 0 }; }
+    } return null;
+  }, t);
+  const hdrCenter = (page) => page.evaluate(() => { const h = [...document.querySelectorAll('*')].find(e => e.shadowRoot && e.shadowRoot.querySelector('.hdr')); const r = h.shadowRoot.querySelector('.hdr').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  const isPill = (page) => page.evaluate(() => { const h = [...document.querySelectorAll('*')].find(e => e.shadowRoot && e.shadowRoot.querySelector('.card')); return h.shadowRoot.querySelector('.card').classList.contains('pill'); });
+
+  console.log('\n[8] minimize: collapses AND expands again (real mouse)');
+  {
+    const page = await fresh(); await paste(page);
+    const m = await findBtn(page, 'Collapse or expand'); await page.mouse.click(m.x, m.y);
+    check('min click collapses to pill', await isPill(page));
+    const hc = await hdrCenter(page); await page.mouse.click(hc.x, hc.y); // tap pill to expand
+    check('tapping the pill expands it again', !(await isPill(page)));
+    await page.close();
+  }
+
+  console.log('\n[9] undo is not gated by tree detection');
+  {
+    const page = await fresh(); await paste(page);
+    const r = await page.evaluate(() => {
+      window.cheat820.maxStats();
+      const maxed = window.__fake.lineup.PG.ppg;
+      const saved = [];
+      document.querySelectorAll('*').forEach(el => Object.keys(el).forEach(k => { if (k.indexOf('__reactFiber$') === 0) { saved.push([el, k, el[k]]); try { el[k] = undefined; } catch (e) {} } }));
+      const rootGone = !window.cheat820.root();
+      const n = window.cheat820.undo();
+      const after = window.__fake.lineup.PG.ppg;
+      saved.forEach(([el, k, v]) => { try { el[k] = v; } catch (e) {} });
+      return { maxed, rootGone, n, after };
+    });
+    check('fiber hidden -> root() null', r.rootGone, r);
+    check('undo still reverts with no detectable tree', r.maxed === 60 && r.after === 11 && r.n > 0, r);
+    await page.close();
+  }
 } catch (e) {
   console.error('\nRUNNER ERROR:', (e && e.stack) || e); fail++;
 } finally { await browser.close(); }
