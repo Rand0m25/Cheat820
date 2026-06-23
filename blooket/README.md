@@ -62,13 +62,24 @@ page load (not persistent). Some managed Chromebooks disable the console.
 | Tab | Feature | Scope |
 |---|---|---|
 | Player | Set tokens / Set XP (rewrites your own end-of-game reward, clamped) | `RISK` |
-| Player | Claim daily reward | `SERVER-SYNCED` |
-| Player | Reflect owned blooks | `DISPLAY-ONLY` |
+| Player | **Set in-game currency** — gold/cash/tokens/coins/fossils/etc. for the current mode (your own client) | `SERVER-SYNCED` |
+| Player | Claim daily reward · Reflect owned blooks | `SERVER-SYNCED` / `DISPLAY-ONLY` |
 | Game | Answer highlighter / Answer reveal / Question peek | `DISPLAY-ONLY` |
-| Game | Auto-answer (+ human delay slider) | `RISK`, off by default |
+| Game | Auto-answer (multiple-choice **and** typing) + human-delay slider | `RISK`, off by default |
 | Cosmetics | Theme accent hue, confetti, animated background, cursor trail | `DISPLAY-ONLY` |
-| Cosmetics | Fancy nickname, apply selected blook | `SERVER-SYNCED` |
+| Cosmetics | Fancy nickname · **Blook chooser** (searchable grid of 120+ blooks) | `SERVER-SYNCED` |
 | Settings | Master switch, panel opacity, panic key, log viewer, reset | — |
+
+### How the cheats actually work
+The trainer reads the **live React component instance** (the standard Blooket access path — walk `body>div` to the wrapper whose `Object.values(el)[1].children[0]._owner.stateNode` is the game component) and uses its real `state`/`props`:
+- **Answer assist** reads `state.question` / `props.client.question` (`answers`, `correctAnswers`, `qType`), highlights/clicks the right `answerContainer` tile by index, and submits typing questions via the typing component's own `sendAnswer`. It only acts while the question is answerable (gated on `state.stage`).
+- **In-game currency** calls `stateNode.setState({...})` with the right key per mode (`gold`, `cash`, `cafeCash`, `crypto`, `weight`, `fossils`, `coins`, `tokens`, …) and, in live games, syncs **only your own node** via `liveGameController.setVal({ path: 'c/<your name>', ... })`.
+- **Blook chooser** sets your own in-game blook through `liveGameController.setVal({ path: 'c/<your name>/b', val })` — your node only, which Blooket then shows to everyone. Account-level permanent ownership still requires actually owning the blook (opening Market boxes); this changes your *in-game* blook.
+
+### GUI upgrades
+Feature **search/filter** bar, **collapsible** section cards (state persisted), a live **status strip** (mode · role · active features · daily token/XP used), per-row **help tooltips**, and the searchable **blook picker grid**.
+
+> ⚠️ **Not included by request:** anything that puts text/effects on *other* players' screens or alters their game. The trainer never writes to another player's node — only your own. The one honest way others see a change is your own server-synced nickname/blook.
 
 ## Hotkeys
 
