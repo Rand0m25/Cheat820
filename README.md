@@ -26,16 +26,22 @@ by default so nothing you do gets submitted.
 1. Open the 82-0 game page.
 2. Open DevTools → **Console**.
 3. Paste the entire contents of **`cheat820-gui-oneline.js`** and press Enter.
-4. A panel appears (bottom-right). Click:
-   - **Run All** – reveal + unlock + go perfect (and max stats)
-   - **Max Stats**, **Reveal Stats**, **Unlock All**, **Go Perfect**, **Scan**, **Undo**
+4. A panel appears (top-left). Click:
+   - **Run All** – reveal + unlock + max your roster (→ 82-0)
+   - **Max Stats**, **Reveal Stats**, **Unlock All**, **Go Perfect**, **Undo**
    - **Block Leaderboard** toggle (ON by default)
-5. Finish the draft and sim the season to land 82-0.
 
-The panel is draggable, collapses to a pill (**tap the pill to expand it again**),
-isolates its own styles (Shadow DOM), and is safe to paste more than once. **Undo**
-always works — it replays the changes it recorded, even if the React tree can't be
-re-detected at that moment.
+Every action applies **instantly**, even in the middle of a pick. **Unlock All**
+flips `testMode`/`hardMode` live without disrupting your current pick (it no longer
+touches `testModeTeamSelection`, which would reset the draft). The 82-0 record is
+**derived from your roster** — there is no win/loss field to set — so **Go Perfect**
+(and **Max Stats**) max your drafted players and the rating saturates to 82-0.
+
+The panel is draggable and collapses to a pill: in the pill the **×** is hidden so a
+stray tap can't destroy it — click the **□** button (or tap the pill) to reopen. It
+isolates its own styles (Shadow DOM) and is safe to paste more than once. **Undo**
+always works — it replays the changes it recorded (immutable React state), even if
+the React tree can't be re-detected at that moment.
 
 ## Use the console engine (no GUI)
 
@@ -52,10 +58,14 @@ cheat820.blockLeaderboard(false); // allow score submission again
 ## How it works
 
 It walks the React fiber tree (`__reactFiber$…`), enumerates each component's
-hook states, and dispatches new values into the ones that look like a lineup,
-the settings object, or a win/loss record. Network writes to
-Firestore/leaderboard/score endpoints are intercepted (`fetch` + `XHR`) and
-stubbed with a `200 {}` while blocking is on.
+hook states, and dispatches new values into the ones that look like the roster
+(position-keyed players) or the settings object. The game stores these as plain
+immutable `useState`, read live every render, so a dispatch applies instantly and
+re-dispatching a captured previous value reverts it (that's how Undo works). The
+win/loss record isn't stored — it's derived from the roster — so the cheat reaches
+82-0 by maxing the players, not by setting a record. Network writes to
+Firestore/leaderboard/score endpoints are intercepted (`fetch` + `XHR`) and stubbed
+with a `200 {}` while blocking is on.
 
 ## Verification
 

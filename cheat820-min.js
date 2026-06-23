@@ -1,9 +1,9 @@
 window.cheat820 = (function () {
   function R() {
-    var e = document.querySelectorAll("body *");
+    var e = document.querySelectorAll("*");
     for (var i = 0; i < e.length; i++) {
-      var k = Object.keys(e[i]).find(function (x) { return x.indexOf("__reactFiber$") === 0; });
-      if (k) { var f = e[i][k]; while (f.return) f = f.return; return f; }
+      var k = Object.keys(e[i]).find(function (x) { return x.indexOf("__reactFiber$") === 0 || x.indexOf("__reactInternalInstance$") === 0; });
+      if (k) { var f = e[i][k]; while (f && f.return) f = f.return; return f; }
     }
     return null;
   }
@@ -25,7 +25,7 @@ window.cheat820 = (function () {
   }
   function P(o) { return o && typeof o === "object" && !Array.isArray(o) && ("ppg" in o || "pts" in o); }
   function cp(o) { var c = {}, k; for (k in o) c[k] = o[k]; return c; }
-  var M = { ppg: 60, pts: 60, rpg: 30, reb: 30, apg: 20, ast: 20, spg: 8, stl: 8, bpg: 8, blk: 8 };
+  var M = { ppg: 99, pts: 99, rpg: 99, reb: 99, apg: 99, ast: 99, spg: 99, stl: 99, bpg: 99, blk: 99 };
   function mx(p) { var c = cp(p), k; for (k in c) { var l = k.toLowerCase(); if (M[l] !== undefined && typeof c[k] === "number") c[k] = M[l]; } return c; }
   var a = {};
   a.hooks = H;
@@ -43,8 +43,8 @@ window.cheat820 = (function () {
     var n = 0;
     H().forEach(function (h) {
       var v = h.v;
-      if (v && typeof v === "object" && "enabledDecades" in v && "testMode" in v) {
-        var nv = cp(v); nv.testMode = true; nv.testModeTeamSelection = true; nv.hardMode = false; h.d(nv); n++;
+      if (v && typeof v === "object" && "testMode" in v && ("hardMode" in v || "enabledDecades" in v)) {
+        var nv = cp(v); nv.testMode = true; nv.hardMode = false; if ("ballKnowledgeMode" in nv) nv.ballKnowledgeMode = false; h.d(nv); n++;
       }
     });
     console.log("82-0 reveal/unlock: " + n + " settings"); return n;
@@ -58,8 +58,8 @@ window.cheat820 = (function () {
         var nv = cp(v); nv.wins = 82; nv.losses = 0; h.d(nv); n++;
       } else if (typeof v === "string" && /^\d{1,2}\s*-\s*\d{1,2}$/.test(v)) { h.d("82-0"); n++; }
     });
-    a.maxStats();
-    console.log("82-0 goPerfect: rewrote " + n + " record(s); finish the draft to sim 82-0"); return n;
+    var m = a.maxStats();
+    console.log("82-0 goPerfect: maxed " + m + " lineup(s) -> 82-0 (record derived from roster)"); return m;
   };
   a.all = function () { a.revealStats(); return a.goPerfect(); };
   console.log("82-0 cheat ready. Run: cheat820.all()");

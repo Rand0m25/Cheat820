@@ -4,10 +4,10 @@ window.cheat820 = (function () {
   function log(m, x) { if (x !== undefined) console.log("%c82-0", ST, m, x); else console.log("%c82-0", ST, m); }
   var undo = [];
   function root() {
-    var els = document.querySelectorAll("body *");
+    var els = document.querySelectorAll("*");
     for (var i = 0; i < els.length; i++) {
-      var key = Object.keys(els[i]).find(function (k) { return k.indexOf("__reactFiber$") === 0; });
-      if (key) { var f = els[i][key]; while (f.return) f = f.return; return f; }
+      var key = Object.keys(els[i]).find(function (k) { return k.indexOf("__reactFiber$") === 0 || k.indexOf("__reactInternalInstance$") === 0; });
+      if (key) { var f = els[i][key]; while (f && f.return) f = f.return; return f; }
     }
     return null;
   }
@@ -37,10 +37,10 @@ window.cheat820 = (function () {
   function copy(o) { var c = {}, k; for (k in o) c[k] = o[k]; return c; }
   function isPlayer(o) { return o && typeof o === "object" && !Array.isArray(o) && ("ppg" in o || "pts" in o); }
   function isLineupObj(v) { if (!v || typeof v !== "object" || Array.isArray(v)) return false; var ks = Object.keys(v); for (var i = 0; i < ks.length; i++) if (isPlayer(v[ks[i]])) return true; return false; }
-  function isSettings(v) { return v && typeof v === "object" && !Array.isArray(v) && ("enabledDecades" in v) && ("testMode" in v); }
+  function isSettings(v) { return v && typeof v === "object" && !Array.isArray(v) && ("testMode" in v) && (("hardMode" in v) || ("enabledDecades" in v)); }
   function isRecObj(v) { return v && typeof v === "object" && !Array.isArray(v) && ((typeof v.wins === "number" && typeof v.losses === "number") || (typeof v.w === "number" && typeof v.l === "number")); }
   function isRecStr(v) { return typeof v === "string" && /^\d{1,2}\s*-\s*\d{1,2}$/.test(v.trim()); }
-  var MAX = { ppg: 60, pts: 60, rpg: 30, reb: 30, apg: 20, ast: 20, spg: 8, stl: 8, bpg: 8, blk: 8 };
+  var MAX = { ppg: 99, pts: 99, rpg: 99, reb: 99, apg: 99, ast: 99, spg: 99, stl: 99, bpg: 99, blk: 99 };
   function maxP(p) { var c = copy(p), k; for (k in c) { var lk = k.toLowerCase(); if (MAX[lk] !== undefined && typeof c[k] === "number") c[k] = MAX[lk]; } return c; }
 
   var api = {};
@@ -68,19 +68,27 @@ window.cheat820 = (function () {
   };
   api.unlockAll = function () {
     var n = 0; hooks().forEach(function (h) {
-      if (isSettings(h.value)) { var nv = copy(h.value); nv.testMode = true; nv.testModeTeamSelection = true; nv.hardMode = false; if (Array.isArray(nv.enabledDecades)) nv.enabledDecades = ["60's", "70's", "80's", "90's", "00's", "10's", "20's"]; set(h, nv); n++; }
+      if (isSettings(h.value)) {
+        var nv = copy(h.value);
+        nv.testMode = true; nv.hardMode = false;
+        if ("ballKnowledgeMode" in nv) nv.ballKnowledgeMode = false;
+        if (Array.isArray(nv.enabledDecades)) nv.enabledDecades = ["60's", "70's", "80's", "90's", "00's", "10's", "20's"];
+        // NB: leave testModeTeamSelection alone — flipping it mid-draft disrupts the pick.
+        set(h, nv); n++;
+      }
     });
-    log("unlockAll: " + n + " settings unlocked"); return n;
+    log("unlockAll: " + n + " setting(s) unlocked (applies instantly)"); return n;
   };
   api.goPerfect = function () {
-    var n = 0; hooks().forEach(function (h) {
+    // The 82-0 record is DERIVED from the roster, so go-perfect = max it.
+    var rec = 0; hooks().forEach(function (h) {
       var v = h.value;
-      if (isRecObj(v)) { var nv = copy(v); if ("wins" in nv) { nv.wins = 82; nv.losses = 0; } if ("w" in nv) { nv.w = 82; nv.l = 0; } set(h, nv); n++; }
-      else if (isRecStr(v)) { set(h, "82-0"); n++; }
+      if (isRecObj(v)) { var nv = copy(v); if ("wins" in nv) { nv.wins = 82; nv.losses = 0; } if ("w" in nv) { nv.w = 82; nv.l = 0; } set(h, nv); rec++; }
+      else if (isRecStr(v)) { set(h, "82-0"); rec++; }
     });
     var m = api.maxStats();
-    log("goPerfect: rewrote " + n + " record(s), maxed " + m + " lineup(s). Finish the draft to sim 82-0.");
-    return n;
+    log("goPerfect: maxed " + m + " lineup(s)" + (rec ? (" + " + rec + " record(s)") : "") + " → 82-0 (record derived from roster).");
+    return m;
   };
   api.all = function () { return { reveal: api.revealStats(), unlock: api.unlockAll(), perfect: api.goPerfect() }; };
   api.undo = function () { var n = 0; while (undo.length) { var u = undo.pop(); try { u.d(u.p); n++; } catch (e) {} } log("undo: reverted " + n); return n; };

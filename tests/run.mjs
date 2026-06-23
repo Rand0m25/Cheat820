@@ -102,24 +102,30 @@ try {
     console.log('\n[4] click "' + btnText + '"');
     const page = await fresh(); await paste(page); await page.evaluate(HELPERS);
     check('button "' + btnText + '" found & clicked', await page.evaluate(t => window.__click(t), btnText));
-    assertFn(await page.evaluate(() => ({ lineup: window.__fake.lineup, settings: window.__fake.settings, record: window.__fake.record, recordStr: window.__fake.recordStr })));
+    assertFn(await page.evaluate(() => ({ roster: window.__fake.roster, settings: window.__fake.settings, record: window.__fake.record })));
     await page.close();
   }
   await clickScenario('reveal', s => check('revealStats -> testMode true', s.settings.testMode === true, s.settings));
-  await clickScenario('unlock', s => { check('unlockAll -> hardMode false', s.settings.hardMode === false, s.settings); check('unlockAll -> decades expanded', s.settings.enabledDecades.length > 1, s.settings); });
-  await clickScenario('max stat', s => { check('maxStats -> PG.ppg 60', s.lineup.PG.ppg === 60, s.lineup.PG); check('maxStats -> C.pts 60', s.lineup.C.pts === 60, s.lineup.C); });
-  await clickScenario('perfect', s => { check('goPerfect -> record 82/0', s.record.wins === 82 && s.record.losses === 0, s.record); check('goPerfect -> "82-0"', s.recordStr === '82-0', s.recordStr); });
-  await clickScenario('all', s => { check('Run All -> testMode true', s.settings.testMode === true, s.settings); check('Run All -> record 82-0', s.record.wins === 82 && s.recordStr === '82-0', s); });
+  await clickScenario('unlock', s => {
+    check('unlockAll -> testMode true', s.settings.testMode === true, s.settings);
+    check('unlockAll -> hardMode false', s.settings.hardMode === false, s.settings);
+    check('unlockAll -> ballKnowledgeMode false', s.settings.ballKnowledgeMode === false, s.settings);
+    // the instant-apply-safe fix: must NOT flip testModeTeamSelection (it would disrupt the pick)
+    check('unlockAll -> does NOT touch testModeTeamSelection', s.settings.testModeTeamSelection === false, s.settings);
+  });
+  await clickScenario('max stat', s => { check('maxStats -> PG.ppg 99', s.roster.PG.ppg === 99, s.roster.PG); check('maxStats -> C.rpg 99', s.roster.C.rpg === 99, s.roster.C); });
+  await clickScenario('perfect', s => { check('goPerfect -> roster maxed (PG.ppg 99)', s.roster.PG.ppg === 99, s.roster.PG); check('goPerfect -> DERIVED record is 82-0', s.record.wins === 82 && s.record.losses === 0, s.record); });
+  await clickScenario('all', s => { check('Run All -> testMode true', s.settings.testMode === true, s.settings); check('Run All -> derived record 82-0', s.record.wins === 82, s.record); });
 
   console.log('\n[5] undo reverts mutations');
   {
     const page = await fresh(); await paste(page); await page.evaluate(HELPERS);
-    const before = await page.evaluate(() => window.__fake.lineup.PG.ppg);
+    const before = await page.evaluate(() => window.__fake.roster.PG.ppg);
     await page.evaluate(() => window.__click('max stat'));
-    const maxed = await page.evaluate(() => window.__fake.lineup.PG.ppg);
+    const maxed = await page.evaluate(() => window.__fake.roster.PG.ppg);
     await page.evaluate(() => window.__click('undo'));
-    const after = await page.evaluate(() => window.__fake.lineup.PG.ppg);
-    check('ppg maxed to 60 before undo', maxed === 60, { before, maxed });
+    const after = await page.evaluate(() => window.__fake.roster.PG.ppg);
+    check('ppg maxed to 99 before undo', maxed === 99, { before, maxed });
     check('undo restored original ppg', after === before, { before, after });
     await page.close();
   }
@@ -171,17 +177,17 @@ try {
     const page = await fresh(); await paste(page);
     const r = await page.evaluate(() => {
       window.cheat820.maxStats();
-      const maxed = window.__fake.lineup.PG.ppg;
+      const maxed = window.__fake.roster.PG.ppg;
       const saved = [];
       document.querySelectorAll('*').forEach(el => Object.keys(el).forEach(k => { if (k.indexOf('__reactFiber$') === 0) { saved.push([el, k, el[k]]); try { el[k] = undefined; } catch (e) {} } }));
       const rootGone = !window.cheat820.root();
       const n = window.cheat820.undo();
-      const after = window.__fake.lineup.PG.ppg;
+      const after = window.__fake.roster.PG.ppg;
       saved.forEach(([el, k, v]) => { try { el[k] = v; } catch (e) {} });
       return { maxed, rootGone, n, after };
     });
     check('fiber hidden -> root() null', r.rootGone, r);
-    check('undo still reverts with no detectable tree', r.maxed === 60 && r.after === 11 && r.n > 0, r);
+    check('undo still reverts with no detectable tree', r.maxed === 99 && r.after === 11 && r.n > 0, r);
     await page.close();
   }
 } catch (e) {
