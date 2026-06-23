@@ -90,10 +90,10 @@
       function copy(o) { var c = {}, k; for (k in o) c[k] = o[k]; return c; }
       function isPlayer(o) { return o && typeof o === "object" && !Array.isArray(o) && ("ppg" in o || "pts" in o); }
       function isLineupObj(v) { if (!v || typeof v !== "object" || Array.isArray(v)) return false; var ks = Object.keys(v); for (var i = 0; i < ks.length; i++) if (isPlayer(v[ks[i]])) return true; return false; }
-      function isSettings(v) { return v && typeof v === "object" && !Array.isArray(v) && ("enabledDecades" in v) && ("testMode" in v); }
+      function isSettings(v) { return v && typeof v === "object" && !Array.isArray(v) && ("testMode" in v) && (("hardMode" in v) || ("enabledDecades" in v)); }
       function isRecObj(v) { return v && typeof v === "object" && !Array.isArray(v) && ((typeof v.wins === "number" && typeof v.losses === "number") || (typeof v.w === "number" && typeof v.l === "number")); }
       function isRecStr(v) { return typeof v === "string" && /^\d{1,2}\s*-\s*\d{1,2}$/.test(v.trim()); }
-      var MAX = { ppg: 60, pts: 60, rpg: 30, reb: 30, apg: 20, ast: 20, spg: 8, stl: 8, bpg: 8, blk: 8 };
+      var MAX = { ppg: 99, pts: 99, rpg: 99, reb: 99, apg: 99, ast: 99, spg: 99, stl: 99, bpg: 99, blk: 99 };
       function maxP(p) { var c = copy(p), k; for (k in c) { var lk = k.toLowerCase(); if (MAX[lk] !== undefined && typeof c[k] === "number") c[k] = MAX[lk]; } return c; }
 
       var api = {};
@@ -129,28 +129,42 @@
       };
       api.unlockAll = function () {
         var n = 0; hooks().forEach(function (h) {
-          if (isSettings(h.value)) { var nv = copy(h.value); nv.testMode = true; nv.testModeTeamSelection = true; nv.hardMode = false; if (Array.isArray(nv.enabledDecades)) nv.enabledDecades = ["60's", "70's", "80's", "90's", "00's", "10's", "20's"]; set(h, nv); n++; }
+          if (isSettings(h.value)) {
+            var nv = copy(h.value);
+            nv.testMode = true;            // reveal ratings + boosted scoring
+            nv.hardMode = false;           // allow skipping team/decade
+            if ("ballKnowledgeMode" in nv) nv.ballKnowledgeMode = false; // stop hiding stats
+            if (Array.isArray(nv.enabledDecades)) nv.enabledDecades = ["60's", "70's", "80's", "90's", "00's", "10's", "20's"];
+            // Do NOT touch testModeTeamSelection: flipping it mid-draft switches
+            // the screen mode and disrupts the pick you're in the middle of.
+            set(h, nv); n++;
+          }
         });
-        log("unlockAll: " + n + " settings unlocked"); return n;
+        log("unlockAll: " + n + " setting(s) unlocked (applies instantly)"); return n;
       };
       api.goPerfect = function () {
-        var n = 0; hooks().forEach(function (h) {
+        // The 82-0 record is DERIVED from your roster (there is no stored
+        // win/loss state to set), so "Go Perfect" = max every drafted player.
+        // The team rating then saturates and the record reads 82-0 instantly.
+        // (If a record-style state ever exists, set it too — harmless no-op here.)
+        var rec = 0; hooks().forEach(function (h) {
           var v = h.value;
-          if (isRecObj(v)) { var nv = copy(v); if ("wins" in nv) { nv.wins = 82; nv.losses = 0; } if ("w" in nv) { nv.w = 82; nv.l = 0; } set(h, nv); n++; }
-          else if (isRecStr(v)) { set(h, "82-0"); n++; }
+          if (isRecObj(v)) { var nv = copy(v); if ("wins" in nv) { nv.wins = 82; nv.losses = 0; } if ("w" in nv) { nv.w = 82; nv.l = 0; } set(h, nv); rec++; }
+          else if (isRecStr(v)) { set(h, "82-0"); rec++; }
         });
         var m = api.maxStats();
-        // surface maxed-lineup count for callers/UI (e.g. Run All badge)
         api.goPerfect.lastMaxed = m;
-        log("goPerfect: rewrote " + n + " record(s), maxed " + m + " lineup(s). Finish the draft to sim 82-0.");
-        return n;
+        api.goPerfect.lastRec = rec;
+        log("goPerfect: maxed " + m + " lineup(s)" + (rec ? (" + " + rec + " record(s)") : "") + ". A maxed five = 82-0 (record is derived from your roster).");
+        return m;
       };
       api.goPerfect.lastMaxed = 0;
+      api.goPerfect.lastRec = 0;
       api.all = function () {
         var reveal = api.revealStats();
         var unlock = api.unlockAll();
-        var perfect = api.goPerfect();
-        return { reveal: reveal, unlock: unlock, perfect: perfect, maxed: api.goPerfect.lastMaxed };
+        var maxed = api.goPerfect();
+        return { reveal: reveal, unlock: unlock, maxed: maxed };
       };
       api.undo = function () { var n = 0; while (undo.length) { var u = undo.pop(); try { u.d(u.p); n++; } catch (e) {} } log("undo: reverted " + n); return n; };
 
@@ -363,8 +377,10 @@
     /* collapsed-to-pill state: hide everything but a compact pill */
     ".card.pill{ width: auto; border-radius: 999px; }",
     ".card.pill .body{ display: none; }",
-    ".card.pill .hdr{ padding: 7px 12px; border-radius: 999px; }",
-    ".card.pill .hdr button.min{ display: none; }",
+    ".card.pill .hdr{ padding: 7px 12px; border-radius: 999px; cursor: pointer; }",
+    /* In the collapsed pill, HIDE close (×) and KEEP the minimize/expand button,
+       so a stray tap can't destroy the panel and there's always a clear way back. */
+    ".card.pill .hdr .cls{ display: none; }",
     ".card.pill .hdr .title{ font-size: 13px; }"
   ].join("\n");
   shadow.appendChild(style);
@@ -391,6 +407,7 @@
   btnClose.type = "button";
   btnClose.title = "Close panel (engine stays active)";
   btnClose.setAttribute("aria-label", "Close panel");
+  btnClose.className = "cls";
   btnClose.textContent = "×"; // multiplication X
   hdr.appendChild(title);
   hdr.appendChild(btnMin);
@@ -408,14 +425,9 @@
   dot.className = "dot bad";
   var statusTxt = document.createElement("div");
   statusTxt.className = "txt";
-  statusTxt.textContent = "Checking React tree...";
-  var btnRefresh = document.createElement("button");
-  btnRefresh.type = "button";
-  btnRefresh.textContent = "Refresh";
-  btnRefresh.setAttribute("aria-label", "Re-scan React tree and hook count");
+  statusTxt.textContent = "Checking…";
   status.appendChild(dot);
   status.appendChild(statusTxt);
-  status.appendChild(btnRefresh);
   body.appendChild(status);
 
   // Helper to build an action button with a count badge
@@ -453,13 +465,11 @@
   var btnReveal = makeAction("Reveal Stats");
   var btnUnlock = makeAction("Unlock All");
   var btnPerfect = makeAction("Go Perfect");
-  var btnScan = makeAction("Scan");
   var btnUndo = makeAction("Undo");
   grid.appendChild(btnMax);
   grid.appendChild(btnReveal);
   grid.appendChild(btnUnlock);
   grid.appendChild(btnPerfect);
-  grid.appendChild(btnScan);
   grid.appendChild(btnUndo);
   body.appendChild(grid);
 
@@ -572,22 +582,12 @@
   // Status uses our own localRoot() so it works on ANY engine. Hook
   // count uses cheat.hooks() (exported by every engine variant).
   function refreshStatus() {
-    var found = false, count = 0;
+    var found = false;
     try { found = !!localRoot(); } catch (e) { found = false; }
-    try { if (found && cheat && cheat.hooks) count = cheat.hooks().length; } catch (e) { count = 0; }
-    if (found) {
-      dot.className = "dot ok";
-      statusTxt.innerHTML = "React tree <b>FOUND</b> &middot; <b>" + count + "</b> hooks";
-    } else {
-      dot.className = "dot bad";
-      statusTxt.innerHTML = "React tree <b>NOT FOUND</b> &middot; open a game page";
-    }
-    return { found: found, count: count };
+    if (found) { dot.className = "dot ok"; statusTxt.innerHTML = "Cheat <b>active</b>"; }
+    else { dot.className = "dot bad"; statusTxt.innerHTML = "Open the <b>82-0</b> game first"; }
+    return { found: found };
   }
-  btnRefresh.addEventListener("click", function () {
-    var s = refreshStatus();
-    appendLog("status: " + (s.found ? "tree found, " + s.count + " hooks" : "no React tree yet - open a game page"), !s.found);
-  });
 
   /* ---------------- Action wiring ---------------- */
   // Pre-action presence check gives a friendly hint instead of letting
@@ -623,11 +623,10 @@
   btnRunAll.addEventListener("click", function () {
     runAction(btnRunAll, "Run All", function () { return cheat.all(); }, function (r) {
       r = r || {};
-      var reveal = r.reveal || 0, unlock = r.unlock || 0, perfect = r.perfect || 0, maxed = r.maxed || 0;
-      var total = reveal + unlock + perfect + maxed;
+      var reveal = r.reveal || 0, unlock = r.unlock || 0, maxed = r.maxed || 0;
       return {
-        badge: total,
-        line: "Run All: reveal " + reveal + ", unlock " + unlock + ", records " + perfect + ", maxed " + maxed + " lineup(s)"
+        badge: reveal + unlock + maxed,
+        line: "Run All: revealed " + reveal + ", unlocked " + unlock + ", maxed " + maxed + " lineup(s) → 82-0"
       };
     });
   });
@@ -648,13 +647,7 @@
   });
   btnPerfect.addEventListener("click", function () {
     runAction(btnPerfect, "Go Perfect", function () { return cheat.goPerfect(); }, function (n) {
-      var maxed = (cheat.goPerfect && typeof cheat.goPerfect.lastMaxed === "number") ? cheat.goPerfect.lastMaxed : 0;
-      return { badge: n, line: "Go Perfect: " + n + " record(s), maxed " + maxed + " lineup(s)" };
-    });
-  });
-  btnScan.addEventListener("click", function () {
-    runAction(btnScan, "Scan", function () { var rows = cheat.scan(); return rows ? rows.length : 0; }, function (n) {
-      return { badge: n, line: "Scan: " + n + " hook(s) (see devtools console.table)" };
+      return { badge: n, line: "Go Perfect: maxed " + n + " lineup(s) → 82-0 (derived from roster)" };
     });
   });
   // Undo must NOT be gated behind tree detection: it just replays the setters

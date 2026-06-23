@@ -11,73 +11,70 @@
 <body>
   <div id="app">
     <h1>Fake 82-0 game</h1>
-    <div id="lineup-node">lineup</div>
     <div id="settings-node">settings</div>
-    <div id="record-node">record</div>
-    <div id="recordstr-node">record string</div>
+    <div id="roster-node">roster</div>
   </div>
 <script>
 (function () {
-  // Build a fake React fiber tree that mimics what cheat820's root()/hooks() scan for.
-  // Each "hook" is a linked-list node: { memoizedState, next, queue:{dispatch} }.
-  // dispatch synchronously writes the new value so tests can observe mutations,
-  // mirroring how a real useState setter eventually updates memoizedState.
-  function App() {}      // component types must be functions/objects
-  function Lineup() {}
+  // Mirror the REAL 82-0.com state model (reverse-engineered):
+  //  - SETTINGS: one useState object {enabledDecades, hardMode, testMode,
+  //    testModeTeamSelection, ballKnowledgeMode}. testMode is the unlock flag.
+  //  - ROSTER: one useState object KEYED BY POSITION (PG/SG/SF/PF/C); each value
+  //    is a player {player, ppg, rpg, apg, spg, bpg}.
+  //  - RECORD: NOT stored — derived from the roster every render. So the cheat
+  //    reaches 82-0 by maxing the roster, not by setting a win/loss hook.
+  function App() {}
   function Settings() {}
-  function RecordCard() {}
-  function RecordStr() {}
+  function Game() {}
 
   function makeHook(value) {
     var node = { memoizedState: value, next: null, queue: null };
-    node.queue = { dispatch: function (v) {
-      // emulate React: accept value or updater fn
-      node.memoizedState = (typeof v === "function") ? v(node.memoizedState) : v;
-    } };
+    node.queue = { dispatch: function (v) { node.memoizedState = (typeof v === "function") ? v(node.memoizedState) : v; } };
     return node;
   }
 
-  // ----- state values -----
-  var lineupValue = {
-    PG: { name: "Test Guard", ppg: 11, rpg: 3, apg: 6, spg: 1, bpg: 0 },
-    SG: { name: "Test Wing",  ppg: 14, rpg: 4, apg: 2, spg: 1, bpg: 0 },
-    C:  { name: "Test Big",   pts: 9,  reb: 8, ast: 1, stl: 0, blk: 2 }
-  };
   var settingsValue = {
     enabledDecades: ["90's"],
+    hardMode: true,
     testMode: false,
     testModeTeamSelection: false,
-    hardMode: true
+    ballKnowledgeMode: true
   };
-  var recordValue = { wins: 5, losses: 3 };
-  var recordStrValue = "5-3";
+  var rosterValue = {
+    PG: { player: "Test Guard", ppg: 11, rpg: 3, apg: 6, spg: 1, bpg: 0 },
+    SG: { player: "Test Wing",  ppg: 14, rpg: 4, apg: 2, spg: 1, bpg: 0 },
+    SF: { player: "Test Fwd",   ppg: 12, rpg: 5, apg: 3, spg: 1, bpg: 1 },
+    PF: { player: "Test Four",  ppg: 10, rpg: 7, apg: 2, spg: 0, bpg: 1 },
+    C:  { player: "Test Big",   ppg: 9,  rpg: 8, apg: 1, spg: 0, bpg: 2 }
+  };
 
-  // ----- fibers -----
-  var fApp      = { type: App,        return: null, child: null, sibling: null, memoizedState: null };
-  var fLineup   = { type: Lineup,     return: fApp,  child: null, sibling: null, memoizedState: makeHook(lineupValue) };
-  var fSettings = { type: Settings,   return: fApp,  child: null, sibling: null, memoizedState: makeHook(settingsValue) };
-  var fRecord   = { type: RecordCard, return: fApp,  child: null, sibling: null, memoizedState: makeHook(recordValue) };
-  var fRecStr   = { type: RecordStr,  return: fApp,  child: null, sibling: null, memoizedState: makeHook(recordStrValue) };
+  // Real derivation (chunk 8bc7adc8536368bc.js): teamOvr -> wins.
+  function deriveRecord(roster) {
+    var ps = Object.keys(roster).map(function (k) { return roster[k]; });
+    var g = 0, p = 0, m = 0, sp = 0, bp = 0;
+    ps.forEach(function (t) { g += t.ppg || 0; p += t.rpg || 0; m += t.apg || 0; sp += t.spg || 0; bp += t.bpg || 0; });
+    var h = Math.round(100 * (g / 133.4 * 0.46 + p / 39.7 * 0.25 + m / 29.3 * 0.18 + sp / 6.1 * 0.07 + bp / 3.2 * 0.04) * 10) / 10;
+    var wins = Math.round(82 * Math.pow(Math.min(h / 110, 1), 1.15));
+    return { teamOvr: h, wins: wins, losses: 82 - wins };
+  }
 
-  fApp.child = fLineup;
-  fLineup.sibling = fSettings;
-  fSettings.sibling = fRecord;
-  fRecord.sibling = fRecStr;
+  var hSettings = makeHook(settingsValue);
+  var hRoster = makeHook(rosterValue);
 
-  // Attach fibers to real DOM nodes via the React-style __reactFiber$<rand> key.
+  var fApp      = { type: App,      return: null, child: null, sibling: null, memoizedState: null };
+  var fSettings = { type: Settings, return: fApp,  child: null, sibling: null, memoizedState: hSettings };
+  var fGame     = { type: Game,     return: fApp,  child: null, sibling: null, memoizedState: hRoster };
+  fApp.child = fSettings; fSettings.sibling = fGame;
+
   var KEY = "__reactFiber$test123";
-  document.getElementById("lineup-node")[KEY] = fLineup;
   document.getElementById("settings-node")[KEY] = fSettings;
-  document.getElementById("record-node")[KEY] = fRecord;
-  document.getElementById("recordstr-node")[KEY] = fRecStr;
+  document.getElementById("roster-node")[KEY] = fGame;
 
-  // Expose the live values so the test runner can read post-mutation state.
   window.__fake = {
     key: KEY,
-    get lineup() { return fLineup.memoizedState.memoizedState; },
-    get settings() { return fSettings.memoizedState.memoizedState; },
-    get record() { return fRecord.memoizedState.memoizedState; },
-    get recordStr() { return fRecStr.memoizedState.memoizedState; }
+    get settings() { return hSettings.memoizedState; },
+    get roster() { return hRoster.memoizedState; },
+    get record() { return deriveRecord(hRoster.memoizedState); } // derived, like the real game
   };
 })();
 </script>
